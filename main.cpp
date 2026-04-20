@@ -145,18 +145,17 @@ class Cheater {
 private:
     mt19937 rng;
     int counter;
+    set<string> keywords;
+
+    bool isKeyword(const string& s) {
+        return keywords.count(s) > 0;
+    }
 
     string renameVar(const string& var) {
-        // Rename variables
-        if (var == "function" || var == "block" || var == "set" ||
-            var == "if" || var == "while" || var == "print" ||
-            var == "array.create" || var == "array.get" || var == "array.set" ||
-            var == "+", var == "-" || var == "*" || var == "/" ||
-            var == "=" || var == "<" || var == ">" || var == "and" || var == "or") {
-            return var; // Don't rename keywords
-        }
-        // Add prefix to user variables
-        return "v" + to_string(counter++) + "_" + var;
+        // Don't rename keywords
+        if (isKeyword(var)) return var;
+        // Generate unique variable names
+        return "_x" + to_string(counter++) + "_" + var.substr(0, min((size_t)3, var.size()));
     }
 
     shared_ptr<SExpr> transform(shared_ptr<SExpr> expr, map<string, string>& varMap) {
@@ -228,7 +227,13 @@ private:
     }
 
 public:
-    Cheater() : rng(12345), counter(0) {}
+    Cheater() : rng(12345), counter(0) {
+        // Initialize keywords set
+        keywords = {"function", "block", "set", "if", "while", "print",
+                   "array.create", "array.get", "array.set",
+                   "+", "-", "*", "/", "=", "<", ">", "<=", ">=", "!=",
+                   "and", "or", "not", "return"};
+    }
 
     string cheat(const string& program) {
         Tokenizer tokenizer(program);
@@ -248,25 +253,68 @@ public:
 // Anticheat: Detect plagiarism
 class AntiCheater {
 private:
+    // Extract structural features from AST
+    vector<string> extractFeatures(shared_ptr<SExpr> expr) {
+        vector<string> features;
+        if (!expr) return features;
+
+        if (expr->type == SExpr::LIST && expr->children.size() > 0) {
+            if (expr->children[0]->type == SExpr::ATOM) {
+                features.push_back("KEYWORD:" + expr->children[0]->atom);
+                features.push_back("SIZE:" + to_string(expr->children.size()));
+            }
+            for (auto& child : expr->children) {
+                auto childFeatures = extractFeatures(child);
+                features.insert(features.end(), childFeatures.begin(), childFeatures.end());
+            }
+        }
+        return features;
+    }
+
     double computeSimilarity(const vector<shared_ptr<SExpr>>& prog1,
                             const vector<shared_ptr<SExpr>>& prog2) {
-        // Simple structural comparison
+        // Extract features from both programs
+        vector<string> features1, features2;
+        for (auto& expr : prog1) {
+            auto f = extractFeatures(expr);
+            features1.insert(features1.end(), f.begin(), f.end());
+        }
+        for (auto& expr : prog2) {
+            auto f = extractFeatures(expr);
+            features2.insert(features2.end(), f.begin(), f.end());
+        }
+
+        // Compare feature sets
+        set<string> set1(features1.begin(), features1.end());
+        set<string> set2(features2.begin(), features2.end());
+
+        vector<string> intersection;
+        set_intersection(set1.begin(), set1.end(),
+                        set2.begin(), set2.end(),
+                        back_inserter(intersection));
+
+        if (set1.empty() && set2.empty()) return 0.5;
+
+        double jaccard = (double)intersection.size() /
+                        (set1.size() + set2.size() - intersection.size());
+
+        // Also do structural comparison
         if (prog1.size() != prog2.size()) {
-            return 0.3 + 0.2 * (1.0 - abs((int)prog1.size() - (int)prog2.size()) /
-                                (double)max(prog1.size(), prog2.size()));
+            jaccard *= 0.8;
         }
 
         int similarities = 0;
         int total = 0;
-
-        for (size_t i = 0; i < prog1.size(); i++) {
+        for (size_t i = 0; i < min(prog1.size(), prog2.size()); i++) {
             auto score = compareExpr(prog1[i], prog2[i]);
             similarities += score.first;
             total += score.second;
         }
 
-        if (total == 0) return 0.5;
-        return (double)similarities / total;
+        double structural = total > 0 ? (double)similarities / total : 0.5;
+
+        // Combine both metrics
+        return 0.6 * jaccard + 0.4 * structural;
     }
 
     pair<int, int> compareExpr(shared_ptr<SExpr> e1, shared_ptr<SExpr> e2) {
