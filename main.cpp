@@ -328,29 +328,27 @@ public:
 };
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        cerr << "Usage: " << argv[0] << " <cheat|anticheat>" << endl;
-        return 1;
-    }
+    // Try to read the first program
+    string prog1 = readProgram(cin);
 
-    string mode = argv[1];
+    // Try to read a second program
+    string prog2 = readProgram(cin);
 
-    if (mode == "cheat") {
-        string program = readProgram(cin);
+    if (prog2.empty()) {
+        // Only one program provided - cheat mode
         Cheater cheater;
-        cout << cheater.cheat(program) << endl;
-    } else if (mode == "anticheat") {
-        string prog1 = readProgram(cin);
-        string prog2 = readProgram(cin);
+        cout << cheater.cheat(prog1) << endl;
+    } else {
+        // Two programs provided - anticheat mode
         string testInput;
-        getline(cin, testInput); // Read remaining input
+        string line;
+        while (getline(cin, line)) {
+            testInput += line + "\n";
+        }
 
         AntiCheater antiCheater;
         double similarity = antiCheater.detect(prog1, prog2, testInput);
         cout << similarity << endl;
-    } else {
-        cerr << "Invalid mode. Use 'cheat' or 'anticheat'" << endl;
-        return 1;
     }
 
     return 0;
