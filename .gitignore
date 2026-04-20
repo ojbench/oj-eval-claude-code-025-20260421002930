@@ -1,0 +1,10 @@
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.o
+code
+cheat
+anticheat
+cheat-submit.cpp
+anticheat-submit.cpp
+reference_repo/
